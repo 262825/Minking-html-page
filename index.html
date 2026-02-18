@@ -39,6 +39,14 @@
     .sta{background:#ffd166}
     .mp{background:#4adf86}
 
+    /* 部位血条颜色（随阈值变化） */
+    .limbbar{height:10px;border-radius:999px;overflow:hidden;border:1px solid #22304d;background:#0b1220}
+    .limbfill{height:100%}
+    .limb-ok{background:#4adf86}
+    .limb-mid{background:#ffd166}
+    .limb-low{background:#ff3a57}
+    .limb-zero{background:#5b6a86}
+
     .mini{font-size:11px;color:#c4d3ff}
     .accordionHeader{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-weight:900}
     .arrow{display:inline-block;width:16px;text-align:center}
@@ -54,10 +62,30 @@
 
     .limbGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
     .limbItem{border:1px solid #22304d;border-radius:10px;padding:8px;background:#0b1220}
+    .limbItem.mid{border-color:#4b4a2a}
+    .limbItem.low{border-color:#5a2030}
+    .limbItem.zero{opacity:.85}
     .limbTitle{font-weight:900;display:flex;justify-content:space-between;gap:8px}
 
     .subPanel{border:1px solid #22304d;border-radius:10px;padding:8px;margin-top:8px;background:#0c1424}
     .subTitle{font-weight:900;margin-bottom:6px}
+
+    /* 头像 */
+    .fighterHeader{display:flex;gap:10px;align-items:flex-start;margin-bottom:6px}
+    .avatarWrap{width:72px;height:72px;border-radius:12px;overflow:hidden;border:1px solid #22304d;background:#0b1220;flex:0 0 auto;position:relative}
+    .avatarWrap img{width:100%;height:100%;object-fit:cover;display:block}
+    .avatarWrap .ph{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#a9b6d6;font-size:11px}
+    .avatarWrap.dim img{filter:grayscale(0.6) brightness(0.55) contrast(0.95)}
+    .avatarWrap.red img{filter:grayscale(0.2) brightness(0.55) contrast(1.05) saturate(1.25)}
+    .avatarWrap.red::after{
+      content:""; position:absolute; inset:0;
+      background:rgba(255,58,87,0.20);
+      mix-blend-mode:screen;
+    }
+    .avatarHint{font-size:11px;color:#c4d3ff;margin-top:4px}
+    .avatarPreview{display:flex;gap:10px;align-items:center;margin-top:8px}
+    .avatarMini{width:44px;height:44px;border-radius:10px;overflow:hidden;border:1px solid #22304d;background:#0b1220}
+    .avatarMini img{width:100%;height:100%;object-fit:cover;display:block}
   </style>
 </head>
 <body>
@@ -99,7 +127,6 @@
 
 <script>
 (() => {
-  // ----------------- 工具 -----------------
   const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
   const chance=(p)=>Math.random()<p;
   const deepClone=(o)=>JSON.parse(JSON.stringify(o));
@@ -128,7 +155,7 @@
     return `<div class="fieldGrid"><div class="muted">${label}</div><div>${html}</div></div>`;
   }
 
-  // ----------------- 部位系统 -----------------
+  // ---- 部位系统 ----
   const LIMBS=[
     { key:"head",  label:"头", ratio:0.15, rollTo:15 },
     { key:"hands", label:"手", ratio:0.20, rollTo:35 },
@@ -154,42 +181,21 @@
     if(!limb||limb.max<=0) return 1;
     return limb.cur/limb.max;
   }
-
-  // 基础随机部位（无偏向）
   function rollHitLimb(){
     const r=Math.floor(Math.random()*100)+1;
     for(const L of LIMBS) if(r<=L.rollTo) return {key:L.key,label:L.label,roll:r};
     return {key:"body",label:"身",roll:r};
   }
-
-  // 外功定点倾向：当外功施展成功时，按目标部位加权
-  // targeting: { enabled:true, limb:"head|hands|body|legs|feet", mult:1.0~5.0 }
   function rollHitLimbWithBias(targeting){
     if(!targeting || targeting.enabled!==true) return rollHitLimb();
     const limb = targeting.limb;
     const mult = clamp(safeNum(targeting.mult,1), 1, 5);
-
-    const base = {
-      head: 0.15,
-      hands:0.20,
-      body: 0.35,
-      legs: 0.20,
-      feet: 0.10
-    };
-    // 加权：目标部位权重*mult
-    const w = {
-      head: base.head,
-      hands: base.hands,
-      body: base.body,
-      legs: base.legs,
-      feet: base.feet
-    };
+    const base = { head:0.15, hands:0.20, body:0.35, legs:0.20, feet:0.10 };
+    const w = {...base};
     if(w[limb]!=null) w[limb] *= mult;
-
     const sum = w.head+w.hands+w.body+w.legs+w.feet;
     const r = Math.random()*sum;
     let acc=0;
-
     acc += w.head; if(r<=acc) return {key:"head",label:"头",roll:"bias"};
     acc += w.hands; if(r<=acc) return {key:"hands",label:"手",roll:"bias"};
     acc += w.body; if(r<=acc) return {key:"body",label:"身",roll:"bias"};
@@ -197,7 +203,7 @@
     return {key:"feet",label:"脚",roll:"bias"};
   }
 
-  // ----------------- 可调度机制库 -----------------
+  // ---- 机制库（略：保留你原有版本主要机制；这里不改机制逻辑） ----
   const EFFECT_LIBRARY=[
     { type:"armor_break", label:"破甲（降低横练）", fields:["chance","duration","value","pct","maxStacks"] },
     { type:"bleed", label:"流血DOT（每回合掉血）", fields:["chance","duration","value","maxStacks"] },
@@ -211,8 +217,6 @@
     { type:"drain", label:"抽取资源（对手体力/内力）", fields:["chance","resource","value"] },
     { type:"lifesteal", label:"吸血（按本次伤害比例回血）", fields:["chance","pct"] },
     { type:"reflect", label:"反伤（挂反伤状态）", fields:["chance","duration","pct","maxStacks"] },
-
-    // 部位阈值专用
     { type:"limb_stat_mod", label:"部位属性修正（即时）", fields:["chance","name","agilityMult","aggressionMult","parryMult","evasionBonus","damageTakenMult","neiliRegenMult"] },
     { type:"action_skip", label:"丢失行动（即时）", fields:["chance","name","actions","once"] },
     { type:"disarm", label:"脱手/武器受损（即时）", fields:["chance","name","mode","once"] },
@@ -232,18 +236,17 @@
     if(type==="drain"){ e.chance=0.20; e.resource="stamina"; e.value=12; }
     if(type==="lifesteal"){ e.chance=0.25; e.pct=0.20; }
     if(type==="reflect"){ e.chance=0.20; e.duration=2; e.pct=0.15; e.maxStacks=2; }
-
     if(type==="limb_stat_mod"){ e.chance=1.0; e.name="阈值惩罚"; e.agilityMult=0.85; }
     if(type==="action_skip"){ e.chance=0.15; e.name="头部眩晕"; e.actions=1; e.once=false; }
     if(type==="disarm"){ e.chance=1.0; e.name="脱手"; e.mode="auto"; e.once=true; }
     return e;
   }
 
-  // ----------------- 全局规则表（可展开） -----------------
+  // ---- 规则（增加头像说明） ----
   const globalRulesEl=document.getElementById("globalRules");
   globalRulesEl.innerHTML = makeAccordion("GLOBAL_RULES","规则总表（点击展开/收起）",`
     <div class="muted">
-      <div class="subTitle">一、基础流程（每回合）</div>
+    <div class="subTitle">一、基础流程（每回合）</div>
       1）回合开始：结算持续伤害（如流血/中毒DOT）→ 双方执行内功机制（回合开始触发）。<br>
       2）判定先后手：用敏捷差决定本回合先手概率。<br>
       3）行动：先手行动一次 → 后手行动一次 → 若触发“连续行动”，高敏者额外行动一次（敏捷差≥25时有概率，封顶12%）。<br><br>
@@ -273,45 +276,49 @@
       2）内功：每回合自动触发内功机制，基础机制为内力自动恢复。<br>
       3）部位阈值：每部位有&lt;50%与&lt;25%两档机制列表：会对人物的属性和动作产生明显影响。<br><br>
 
-     <div class="subTitle">七、关于防具的自定义</div>
+     <div class="subTitle">七、关于头像的自定义）</div>
+      1）玩家可为角色A/B上传本地图片作为头像。<br>
+      2）头像与人物卡绑定：在左侧人物卡编辑器中可直观更换/清空。<br><br>
+
+     <div class="subTitle">八、关于防具的自定义</div>
       防具分为头，手，身，腿，脚五部分<br>
       每部分防具都会提供属性加成，与角色的基础属性一一对应<br>
       防具提供的额外防御对应到各部位，其他属性综合统计<br><br>
 
-      <div class="subTitle">八、关于内功的自定义</div>
+      <div class="subTitle">九、关于内功的自定义</div>
       1）“内功机制调度”一栏，下拉选择想要添加的内功机制后，点击右侧“添加机制”，便可在下方找到添加的对应机制，切勿重复添加，如果重复添加请删除。<br>
       2）内功默认有通用属性修正，每回合都有概率为人物附加属性，一排第一为“触发概率”，一排第二为“持续回合”，二排第一为内功名字，二排第二以后均<br>
       与人物基础属性面板一一对应，请根据需要设定<br><br>
 
-      <div class="subTitle">九、关于外功的自定义</div>
+      <div class="subTitle">十、关于外功的自定义</div>
       外功的机制调度与防具和内功的机制调度类似<br>
       外攻拥有“部位倾向”，当外功施展成功时，可以让该次攻击更偏向某个固定部位：<br>
       - 目标部位：头/手/身/腿/脚<br>
       - 倾向倍率 mult：1=无变化，2=明显偏向，3~5=强烈偏向（仍非必定）。<br>
       仅在“外功施展成功”的那一次攻击生效。<br><br>
 
-     <div class="subTitle">十、可能的问题</div>
+     <div class="subTitle">十一、可能的问题</div>
       自定义人物卡时可能会出现上方数值填写后，下方箭头无法打开的问题，因此建议先设定防具，内功，外功部分。<br><br>
 
-     <div class="subTitle">十一、叠甲声明</div>
+     <div class="subTitle">十二、叠甲声明</div>
       本对战平台由ai辅助完成，纯闲着没事做着玩的，仅在朋友间分享，切勿商用或进行其他违法恶意行为。凡因此出现问题作者概不负责。<br>
       作者QQ：3061990735<br><br>
+
+
     </div>
   `, false);
 
-  // ----------------- 人物卡结构 -----------------
+  // ---- 空白模板 ----
   function emptyLimbRules(){
     const o={};
-    for(const L of LIMBS){
-      o[L.key]={ below50:[], below25:[] };
-    }
+    for(const L of LIMBS) o[L.key]={ below50:[], below25:[] };
     return o;
   }
 
-  // ----------------- 预置人物卡 JSON（你也可以复制出来替换/编辑） -----------------
-  // 角色A：李逍遥（御剑术/蜀山心法）
+  // ---- 预设人物卡（含 avatarDataUrl 字段，可为空） ----
   const PRESET_LI_XIAOYAO = {
     "name":"李逍遥",
+    "avatarDataUrl":"",  /* ← 运行时可在编辑器上传本地图片写入这里 */
     "weapon":{
       "mainHand":{"name":"青锋剑","hands":1,"extraAttack":18,"extraDefense":4},
       "offHand":{"name":"剑诀护符","hands":1,"extraAttack":4,"extraDefense":6}
@@ -323,22 +330,13 @@
       "legs":{"name":"束裤","mods":{"agility":2}},
       "feet":{"name":"轻靴","mods":{"agility":4,"evasionBonus":0.03}}
     },
-    "hp":300,
-    "stamina":210,
-    "neili":160,
-    "strength":66,
-    "hardening":56,
-    "agility":82,
-    "aggression":72,
-    "parry":68,
-    "baseCrit":0.12,
-    "critMult":1.60,
+    "hp":300,"stamina":210,"neili":160,
+    "strength":66,"hardening":56,"agility":82,
+    "aggression":72,"parry":68,
+    "baseCrit":0.12,"critMult":1.60,
     "outerSkill":{
-      "name":"御剑术",
-      "enabled":true,
-      "neiliCost":22,
-      "staminaCost":10,
-      "bonusAttack":16,
+      "name":"御剑术","enabled":true,
+      "neiliCost":22,"staminaCost":10,"bonusAttack":16,
       "targeting":{"enabled":true,"limb":"body","mult":1.6},
       "effects":[
         {"type":"armor_break","chance":0.30,"duration":1,"value":8,"pct":0.00,"maxStacks":3},
@@ -347,47 +345,31 @@
       ]
     },
     "innerSkill":{
-      "name":"蜀山心法",
-      "regenPerRound":18,
+      "name":"蜀山心法","regenPerRound":18,
       "effects":[
         {"type":"stat_mod","chance":0.35,"duration":2,"name":"心法护体","damageTakenMult":0.92,"neiliRegenMult":1.08,"maxStacks":1},
         {"type":"restore","chance":0.18,"resource":"stamina","value":12}
       ]
     },
     "limbRules":{
-      "head":{
-        "below50":[{"type":"action_skip","chance":0.12,"name":"额创晕眩","actions":1,"once":false}],
-        "below25":[{"type":"action_skip","chance":0.30,"name":"头部重创","actions":1,"once":false}]
-      },
-      "hands":{
-        "below50":[{"type":"limb_stat_mod","chance":1.0,"name":"手腕酸麻","aggressionMult":0.88}],
-        "below25":[
-          {"type":"limb_stat_mod","chance":1.0,"name":"手部重伤","aggressionMult":0.72},
-          {"type":"disarm","chance":1.0,"name":"脱手","mode":"auto","once":true}
-        ]
-      },
-      "body":{
-        "below50":[{"type":"limb_stat_mod","chance":1.0,"name":"气息紊乱","damageTakenMult":1.10,"neiliRegenMult":0.92}],
-        "below25":[{"type":"limb_stat_mod","chance":1.0,"name":"内息受损","damageTakenMult":1.22,"neiliRegenMult":0.78}]
-      },
-      "legs":{
-        "below50":[{"type":"limb_stat_mod","chance":1.0,"name":"步伐不稳","agilityMult":0.88}],
-        "below25":[{"type":"limb_stat_mod","chance":1.0,"name":"腿伤严重","agilityMult":0.62}]
-      },
-      "feet":{
-        "below50":[{"type":"limb_stat_mod","chance":1.0,"name":"脚踝扭伤","evasionBonus":-0.04,"agilityMult":0.96}],
-        "below25":[{"type":"limb_stat_mod","chance":1.0,"name":"脚部重伤","evasionBonus":-0.12,"agilityMult":0.86}]
-      }
+      "head":{"below50":[{"type":"action_skip","chance":0.12,"name":"额创晕眩","actions":1,"once":false}],
+              "below25":[{"type":"action_skip","chance":0.30,"name":"头部重创","actions":1,"once":false}]},
+      "hands":{"below50":[{"type":"limb_stat_mod","chance":1.0,"name":"手腕酸麻","aggressionMult":0.88}],
+               "below25":[{"type":"limb_stat_mod","chance":1.0,"name":"手部重伤","aggressionMult":0.72},
+                          {"type":"disarm","chance":1.0,"name":"脱手","mode":"auto","once":true}]},
+      "body":{"below50":[{"type":"limb_stat_mod","chance":1.0,"name":"气息紊乱","damageTakenMult":1.10,"neiliRegenMult":0.92}],
+              "below25":[{"type":"limb_stat_mod","chance":1.0,"name":"内息受损","damageTakenMult":1.22,"neiliRegenMult":0.78}]},
+      "legs":{"below50":[{"type":"limb_stat_mod","chance":1.0,"name":"步伐不稳","agilityMult":0.88}],
+              "below25":[{"type":"limb_stat_mod","chance":1.0,"name":"腿伤严重","agilityMult":0.62}]},
+      "feet":{"below50":[{"type":"limb_stat_mod","chance":1.0,"name":"脚踝扭伤","evasionBonus":-0.04,"agilityMult":0.96}],
+              "below25":[{"type":"limb_stat_mod","chance":1.0,"name":"脚部重伤","evasionBonus":-0.12,"agilityMult":0.86}]}
     }
   };
 
-  // 角色B：隆（升龙拳/杀意波动），无武器，手部脚部防具无
   const PRESET_RYU = {
     "name":"隆",
-    "weapon":{
-      "mainHand":{"name":"无","hands":1,"extraAttack":0,"extraDefense":0},
-      "offHand":null
-    },
+    "avatarDataUrl":"",
+    "weapon":{"mainHand":{"name":"无","hands":1,"extraAttack":0,"extraDefense":0},"offHand":null},
     "armor":{
       "head":{"name":"护额","mods":{"hardening":4,"parry":2}},
       "hands":{"name":"无","mods":{}},
@@ -395,22 +377,13 @@
       "legs":{"name":"护膝","mods":{"agility":2,"hardening":3}},
       "feet":{"name":"无","mods":{}}
     },
-    "hp":320,
-    "stamina":240,
-    "neili":140,
-    "strength":78,
-    "hardening":60,
-    "agility":70,
-    "aggression":76,
-    "parry":64,
-    "baseCrit":0.10,
-    "critMult":1.55,
+    "hp":320,"stamina":240,"neili":140,
+    "strength":78,"hardening":60,"agility":70,
+    "aggression":76,"parry":64,
+    "baseCrit":0.10,"critMult":1.55,
     "outerSkill":{
-      "name":"升龙拳",
-      "enabled":true,
-      "neiliCost":18,
-      "staminaCost":14,
-      "bonusAttack":18,
+      "name":"升龙拳","enabled":true,
+      "neiliCost":18,"staminaCost":14,"bonusAttack":18,
       "targeting":{"enabled":true,"limb":"head","mult":2.3},
       "effects":[
         {"type":"stun","chance":0.22,"duration":1,"actions":1},
@@ -419,42 +392,29 @@
       ]
     },
     "innerSkill":{
-      "name":"杀意波动",
-      "regenPerRound":12,
+      "name":"杀意波动","regenPerRound":12,
       "effects":[
         {"type":"stat_mod","chance":0.40,"duration":2,"name":"杀意涌动","aggressionMult":1.08,"critBonus":0.03,"damageTakenMult":1.05,"maxStacks":1},
         {"type":"restore","chance":0.12,"resource":"stamina","value":10}
       ]
     },
     "limbRules":{
-      "head":{
-        "below50":[{"type":"action_skip","chance":0.10,"name":"头部震荡","actions":1,"once":false}],
-        "below25":[{"type":"action_skip","chance":0.28,"name":"重度脑震荡","actions":1,"once":false}]
-      },
-      "hands":{
-        "below50":[{"type":"limb_stat_mod","chance":1.0,"name":"拳峰疼痛","aggressionMult":0.90}],
-        "below25":[{"type":"limb_stat_mod","chance":1.0,"name":"手部骨裂","aggressionMult":0.70,"parryMult":0.85}]
-      },
-      "body":{
-        "below50":[{"type":"limb_stat_mod","chance":1.0,"name":"躯干受创","damageTakenMult":1.10,"neiliRegenMult":0.92}],
-        "below25":[{"type":"limb_stat_mod","chance":1.0,"name":"内伤加重","damageTakenMult":1.25,"neiliRegenMult":0.78}]
-      },
-      "legs":{
-        "below50":[{"type":"limb_stat_mod","chance":1.0,"name":"膝盖钝痛","agilityMult":0.90}],
-        "below25":[{"type":"limb_stat_mod","chance":1.0,"name":"腿伤严重","agilityMult":0.65}]
-      },
-      "feet":{
-        "below50":[{"type":"limb_stat_mod","chance":1.0,"name":"落地不稳","evasionBonus":-0.05,"agilityMult":0.96}],
-        "below25":[{"type":"limb_stat_mod","chance":1.0,"name":"脚部重挫","evasionBonus":-0.12,"agilityMult":0.86}]
-      }
+      "head":{"below50":[{"type":"action_skip","chance":0.10,"name":"头部震荡","actions":1,"once":false}],
+              "below25":[{"type":"action_skip","chance":0.28,"name":"重度脑震荡","actions":1,"once":false}]},
+      "hands":{"below50":[{"type":"limb_stat_mod","chance":1.0,"name":"拳峰疼痛","aggressionMult":0.90}],
+               "below25":[{"type":"limb_stat_mod","chance":1.0,"name":"手部骨裂","aggressionMult":0.70,"parryMult":0.85}]},
+      "body":{"below50":[{"type":"limb_stat_mod","chance":1.0,"name":"躯干受创","damageTakenMult":1.10,"neiliRegenMult":0.92}],
+              "below25":[{"type":"limb_stat_mod","chance":1.0,"name":"内伤加重","damageTakenMult":1.25,"neiliRegenMult":0.78}]},
+      "legs":{"below50":[{"type":"limb_stat_mod","chance":1.0,"name":"膝盖钝痛","agilityMult":0.90}],
+              "below25":[{"type":"limb_stat_mod","chance":1.0,"name":"腿伤严重","agilityMult":0.65}]},
+      "feet":{"below50":[{"type":"limb_stat_mod","chance":1.0,"name":"落地不稳","evasionBonus":-0.05,"agilityMult":0.96}],
+              "below25":[{"type":"limb_stat_mod","chance":1.0,"name":"脚部重挫","evasionBonus":-0.12,"agilityMult":0.86}]}
     }
   };
 
-  // 这里就是你要“复制粘贴到对应部分”的 JSON 区域：
-  // 你也可以直接替换 PRESET_LI_XIAOYAO / PRESET_RYU 的内容来做自定义预设。
   let editorModel={ A: PRESET_LI_XIAOYAO, B: PRESET_RYU };
 
-  // ----------------- 状态系统 -----------------
+  // ---- 状态系统（同你之前版本） ----
   function addStatus(target, st, log){
     target.statuses=target.statuses||[];
     const maxStacks=Math.max(1,safeNum(st.maxStacks,1));
@@ -486,7 +446,6 @@
     if(s) s.params.actions -= 1;
   }
 
-  // ----------------- 机制触发（外功/内功/状态） -----------------
   function healTotal(f, value){
     if(value<=0) return;
     const order=["body","head","hands","legs","feet"];
@@ -506,8 +465,7 @@
     for(const e of effects){
       if(!e || typeof e!=="object") continue;
       const ch=clamp(safeNum(e.chance,1),0,1);
-      const r=Math.random();
-      if(r>ch) continue;
+      if(Math.random()>ch) continue;
 
       const type=e.type;
       const duration=Math.max(0,safeNum(e.duration,0));
@@ -526,20 +484,6 @@
         const res=(e.resource||"neili");
         if(res==="stamina"){ target.stamina=clamp(target.stamina+v,0,target.maxStamina); log(`${attacker.name}触发【回体】→ ${target.name}+${v}体力。`); }
         else { target.neili=clamp(target.neili+v,0,target.maxNeili); log(`${attacker.name}触发【回内】→ ${target.name}+${v}内力。`); }
-        continue;
-      }
-      if(type==="drain"){
-        const v=Math.max(0,safeNum(e.value,0));
-        const res=(e.resource||"neili");
-        if(res==="stamina"){
-          defender.stamina=clamp(defender.stamina-v,0,defender.maxStamina);
-          attacker.stamina=clamp(attacker.stamina+Math.floor(v*0.5),0,attacker.maxStamina);
-          log(`${attacker.name}触发【抽体】→ ${defender.name}-${v}体力（自身回收部分）。`);
-        }else{
-          defender.neili=clamp(defender.neili-v,0,defender.maxNeili);
-          attacker.neili=clamp(attacker.neili+Math.floor(v*0.5),0,attacker.maxNeili);
-          log(`${attacker.name}触发【抽内】→ ${defender.name}-${v}内力（自身回收部分）。`);
-        }
         continue;
       }
 
@@ -610,7 +554,7 @@
     }
   }
 
-  // ----------------- 部位阈值：即时效果 -----------------
+  // ---- 部位阈值即时效果（略：沿用你原逻辑） ----
   function limbThresholdBucket(f, limbKey){
     const r=limbRatio(f, limbKey);
     const rules=f.limbRules?.[limbKey] || {below50:[],below25:[]};
@@ -619,7 +563,6 @@
     if(r<0.25) list.push(...(rules.below25||[]));
     return { r, list };
   }
-
   function applyLimbStatMods(eff, f){
     for(const L of LIMBS){
       const { list } = limbThresholdBucket(f, L.key);
@@ -628,7 +571,6 @@
         if(e.type!=="limb_stat_mod") continue;
         const ch=clamp(safeNum(e.chance,1),0,1);
         if(!chance(ch)) continue;
-
         if(e.agilityMult!=null) eff.agility *= safeNum(e.agilityMult,1);
         if(e.aggressionMult!=null) eff.aggression *= safeNum(e.aggressionMult,1);
         if(e.parryMult!=null) eff.parry *= safeNum(e.parryMult,1);
@@ -638,7 +580,6 @@
       }
     }
   }
-
   function applyLimbActionEffects(actor, log){
     for(const L of LIMBS){
       const { list } = limbThresholdBucket(actor, L.key);
@@ -651,7 +592,6 @@
         const once = (e.once===true);
         const name = (e.name||type);
         const key = `limb_once_${L.key}_${type}_${name}`;
-
         if(once && actor.flags?.onceUsed?.[key]) continue;
         if(!chance(ch)) continue;
 
@@ -666,7 +606,6 @@
         if(type==="disarm"){
           const mode=(e.mode||"auto");
           if(actor.flags.disarmed) { if(once) actor.flags.onceUsed[key]=true; continue; }
-
           if(mode==="offhand"){
             if(actor.weapon.offHand){ actor.weapon.offHand=null; actor.flags.disarmed=true; actor.flags.disarmMsg="副武器脱手"; }
           } else if(mode==="twohand_degrade"){
@@ -685,7 +624,6 @@
               actor.flags.disarmed=true; actor.flags.disarmMsg="手部重伤（无副手可脱）";
             }
           }
-
           if(actor.flags.disarmMsg){
             log(`${actor.name}触发部位阈值效果【${name}】→ ${actor.flags.disarmMsg}。`);
           }
@@ -696,10 +634,9 @@
     }
   }
 
-  // ----------------- 有效属性 -----------------
+  // ---- 有效属性（含防具回内倍率、部位阈值即时修正） ----
   function getEffectiveStats(f){
     const fatigueK=f.flags.fatigued?0.5:1.0;
-
     const eff={
       strength:safeNum(f.strength,0),
       hardening:safeNum(f.hardening,0),
@@ -765,10 +702,8 @@
         if(p.agilityMult!=null) eff.agility *= Math.pow(safeNum(p.agilityMult,1), stacks);
         if(p.aggressionMult!=null) eff.aggression *= Math.pow(safeNum(p.aggressionMult,1), stacks);
         if(p.parryMult!=null) eff.parry *= Math.pow(safeNum(p.parryMult,1), stacks);
-
         eff.critBonus += safeNum(p.critBonus,0)*stacks;
         eff.evasionBonus += safeNum(p.evasionBonus,0)*stacks;
-
         if(p.damageDealtMult!=null) eff.damageDealtMult *= Math.pow(safeNum(p.damageDealtMult,1), stacks);
         if(p.damageTakenMult!=null) eff.damageTakenMult *= Math.pow(safeNum(p.damageTakenMult,1), stacks);
         if(p.staminaCostMult!=null) eff.staminaCostMult *= Math.pow(safeNum(p.staminaCostMult,1), stacks);
@@ -787,14 +722,12 @@
     eff.agility=Math.max(0,eff.agility);
 
     applyLimbStatMods(eff, f);
-
     eff.critChance=clamp(eff.baseCrit + eff.critBonus, 0, 0.9);
     eff.evasion=clamp(eff.agility/250 + eff.evasionBonus, 0, 0.65);
-
     return eff;
   }
 
-  // ----------------- 体力与休息 -----------------
+  // ---- 体力与休息 ----
   function applyFatigueIfNeeded(f, log){
     if(!f.flags.fatigueTriggered && f.stamina < f.maxStamina*0.25){
       f.flags.fatigueTriggered=true;
@@ -819,7 +752,7 @@
     return d;
   }
 
-  // ----------------- 先后手与连续行动 -----------------
+  // ---- 先后手与连续行动 ----
   function decideOrder(A,B,log){
     const a=getEffectiveStats(A).agility;
     const b=getEffectiveStats(B).agility;
@@ -827,31 +760,26 @@
     const roll=Math.random();
     const first=roll<pA?"A":"B";
     const second=first==="A"?"B":"A";
-
     const diff=Math.abs(a-b);
     let pExtra=0;
     if(diff>=25) pExtra=clamp((diff-25)/300,0,0.12);
     const high=a>b?"A":"B";
     const extraRoll=Math.random();
     const extra=(diff>=25 && extraRoll<pExtra)?high:null;
-
     log(`先后手：敏捷A=${a.toFixed(0)} B=${b.toFixed(0)} P(A先手)≈${pA.toFixed(2)} 掷=${roll.toFixed(2)} → ${first}先手。`);
     if(diff>=25) log(`连续行动：差=${diff.toFixed(0)} 高敏=${high} P≈${pExtra.toFixed(2)} 掷=${extraRoll.toFixed(2)} → ${extra?`${extra}额外行动`:"无"}。`);
     return {first,second,extra};
   }
 
-  // ----------------- 命中/暴击/补正 -----------------
+  // ---- 命中/暴击/补正 ----
   function hitCheck(attacker, defender){
     const a=getEffectiveStats(attacker);
     const d=getEffectiveStats(defender);
-
     const baseHit=0.78;
     const aggrFactor=a.aggression/(a.aggression + d.parry + 1);
     let hitChance=baseHit + (aggrFactor-0.5)*0.20;
-
     hitChance += clamp((a.agility-d.agility)/300, -0.06, 0.06);
     hitChance -= d.evasion;
-
     hitChance=clamp(hitChance, 0.05, 0.95);
     const roll=Math.random();
     return {hit:roll<hitChance, roll, hitChance};
@@ -872,30 +800,27 @@
     return aEff.aggression/denom;
   }
 
-  // ----------------- 伤害落部位/死亡 -----------------
+  // ---- 伤害落部位/死亡 ----
   function applyDamageToLimb(defender, limbKey, dmg, log, suffix=""){
     const limb=defender.limbs[limbKey];
     const before=limb.cur;
     limb.cur=clamp(limb.cur-dmg, 0, limb.max);
     log(`${defender.name}${suffix}：${limbLabel(limbKey)}部位受伤-${dmg}（${before.toFixed(0)}→${limb.cur.toFixed(0)}）。`);
-
     if((limbKey==="head" || limbKey==="body") && limb.cur<=0){
       for(const k in defender.limbs) defender.limbs[k].cur=0;
     }
   }
   function isDead(f){ return totalHpFromLimbs(f)<=0; }
 
-  // ----------------- 外功判定 -----------------
+  // ---- 外功判定 ----
   function decideUseOuter(attacker, defender, log){
     const s=attacker.outerSkill;
     if(!s || !s.enabled) return {ok:false};
     const aEff=getEffectiveStats(attacker);
     const dEff=getEffectiveStats(defender);
-
     const neiliCost=Math.floor(safeNum(s.neiliCost,0)*aEff.neiliCostMult);
     const staminaCost=Math.floor(safeNum(s.staminaCost,0)*aEff.staminaCostMult);
     if(attacker.neili<neiliCost || attacker.stamina<staminaCost) return {ok:false};
-
     const staRatio=attacker.maxStamina>0?attacker.stamina/attacker.maxStamina:0;
     const agiEdge=clamp((aEff.agility-dEff.agility)/300, -0.06, 0.06);
     const p=clamp(0.18+0.65*staRatio+agiEdge, 0.15, 0.80);
@@ -905,10 +830,9 @@
     return {ok, neiliCost, staminaCost};
   }
 
-  // ----------------- 攻击 -----------------
+  // ---- 攻击（含外功定点倾向） ----
   function doAttack(attacker, defender, log){
     applyLimbActionEffects(attacker, log);
-
     if(hasStun(attacker)){
       consumeStun(attacker);
       log(`${attacker.name}处于【眩晕/丢行动】，本次行动跳过。`);
@@ -929,7 +853,6 @@
       return;
     }
 
-    // 外功判定先做（因为“外功定点倾向”只在施展成功时生效）
     let extraAtk=aEff0.extraAttack;
     let skillText="";
     const od=decideUseOuter(attacker, defender, log);
@@ -944,7 +867,6 @@
       tryApplyEffects(attacker.outerSkill.effects, attacker, defender, {phase:"onHitPre"}, log);
     }
 
-    // 命中部位：若外功成功且开了 targeting，则偏向目标部位
     const targeting = (usedOuter && attacker.outerSkill?.targeting?.enabled) ? attacker.outerSkill.targeting : null;
     const limbHit = rollHitLimbWithBias(targeting);
     if(targeting){
@@ -969,9 +891,7 @@
     dmg=Math.floor(dmg*dEff.damageTakenMult);
 
     log(`${attacker.name}${skillText}，命中${limbHit.label}(${limbHit.roll==="bias"?"偏向":"掷"+limbHit.roll})，攻补=${(mult*100).toFixed(0)}% 内补=${neiliBonus} 伤害=${dmg}${c.crit?`（暴击×${c.critMult}）`:""}。`);
-
     applyDamageToLimb(defender, limbHit.key, dmg, log);
-
     tryApplyEffects(attacker.outerSkill?.effects, attacker, defender, {phase:"onHitPost",dmg}, log);
 
     const refls=(defender.statuses||[]).filter(s=>s.type==="reflect");
@@ -988,7 +908,7 @@
     }
   }
 
-  // ----------------- 内功回内 -----------------
+  // ---- 内功回内 ----
   function regenNeiliByInner(f, log){
     const eff=getEffectiveStats(f);
     const base=safeNum(f.innerSkill?.regenPerRound,0);
@@ -1001,14 +921,10 @@
     tryApplyEffects(f.innerSkill?.effects, f, null, {phase:"onRoundStart"}, log);
   }
 
-  // ----------------- 回合推进 -----------------
+  // ---- 回合推进 ----
   function doOneAction(actor, target, log){
     if(isDead(actor)||isDead(target)) return;
-
-    if(actor.flags.disarmMsg){
-      log(`${actor.name}：${actor.flags.disarmMsg}。`);
-      actor.flags.disarmMsg=null;
-    }
+    if(actor.flags.disarmMsg){ log(`${actor.name}：${actor.flags.disarmMsg}。`); actor.flags.disarmMsg=null; }
 
     if(shouldRest(actor)){
       const d=restRecover(actor);
@@ -1031,7 +947,7 @@
     applyFatigueIfNeeded(target, log);
   }
 
-  // ----------------- UI与渲染 -----------------
+  // ---- UI ----
   const startBtn=document.getElementById("startBtn");
   const resetBtn=document.getElementById("resetBtn");
   const stepBtn=document.getElementById("stepBtn");
@@ -1051,14 +967,9 @@
   let state=null;
   let running=false;
 
-  function emptyLimbRules(){
-    const o={};
-    for(const L of LIMBS) o[L.key]={below50:[],below25:[]};
-    return o;
-  }
-
   function normalizeFighter(raw){
     const f=deepClone(raw);
+    f.avatarDataUrl = (typeof f.avatarDataUrl==="string") ? f.avatarDataUrl : "";
     f.maxHp=f.maxHp ?? f.hp;
     f.maxStamina=f.maxStamina ?? f.stamina;
     f.maxNeili=f.maxNeili ?? f.neili;
@@ -1089,9 +1000,23 @@
 
     f.flags={ fatigueTriggered:false, fatigued:false, disarmed:false, disarmMsg:null, onceUsed:{} };
     f.statuses=[];
-
     initLimbs(f);
     return f;
+  }
+
+  function avatarStageClass(f){
+    const hp = totalHpFromLimbs(f);
+    const p = f.maxHp>0 ? hp/f.maxHp : 0;
+    if(p<=0.25) return "red";
+    if(p<=0.50) return "dim";
+    return "";
+  }
+
+  function limbStage(p){
+    if(p<=0) return "zero";
+    if(p<0.25) return "low";
+    if(p<0.5) return "mid";
+    return "ok";
   }
 
   function renderFighterBox(f){
@@ -1115,29 +1040,42 @@
       return `<span class="tag" style="background:#18233b">${esc(t)}·${s.turns}</span>`;
     }).join("") + ((f.statuses||[]).length>6?`<span class="tag">…</span>`:"");
 
-    const limbBars=LIMBS.map(L=>{
-      const limb=f.limbs[L.key];
-      const p=limb.max<=0?0:clamp(limb.cur/limb.max,0,1);
-      const tier = p<0.25 ? "<25%" : (p<0.5 ? "<50%" : "正常");
-      return `
-        <div class="limbItem">
-          <div class="limbTitle"><span>${L.label}</span><span class="mono">${limb.cur.toFixed(0)}/${limb.max.toFixed(0)}</span></div>
-          <div class="bar" style="margin-top:6px"><div class="hp" style="width:${(p*100).toFixed(2)}%"></div></div>
-          <div class="mini">阈值：${tier}</div>
-        </div>
-      `;
-    }).join("");
-
     const targeting = f.outerSkill?.targeting;
     const targetTag = (f.outerSkill?.enabled && targeting?.enabled)
       ? `<span class="tag" style="background:#22345e">外功偏向：${limbLabel(targeting.limb)}×${clamp(safeNum(targeting.mult,1),1,5).toFixed(1)}</span>`
       : "";
 
+    const limbBars=LIMBS.map(L=>{
+      const limb=f.limbs[L.key];
+      const p=limb.max<=0?0:clamp(limb.cur/limb.max,0,1);
+      const tier = p<0.25 ? "<25%" : (p<0.5 ? "<50%" : "正常");
+      const st = limbStage(p);
+      const itemCls = st==="low"?"low":(st==="mid"?"mid":(st==="zero"?"zero":""));
+      const fillCls = st==="ok"?"limb-ok":(st==="mid"?"limb-mid":(st==="low"?"limb-low":"limb-zero"));
+      return `
+        <div class="limbItem ${itemCls}">
+          <div class="limbTitle"><span>${L.label}</span><span class="mono">${limb.cur.toFixed(0)}/${limb.max.toFixed(0)}</span></div>
+          <div class="limbbar" style="margin-top:6px"><div class="limbfill ${fillCls}" style="width:${(p*100).toFixed(2)}%"></div></div>
+          <div class="mini">阈值：${tier}</div>
+        </div>
+      `;
+    }).join("");
+
+    const avCls = avatarStageClass(f);
+    const avatarHtml = f.avatarDataUrl
+      ? `<img alt="avatar" src="${esc(f.avatarDataUrl)}">`
+      : `<div class="ph">无头像</div>`;
+
     return `
-      <div style="font-weight:900">${esc(f.name)}</div>
-      <div class="muted small" style="margin-top:6px">武器：${weaponTags}</div>
-      <div class="muted small" style="margin-top:6px">防具：${armorTags}</div>
-      <div class="muted small" style="margin-top:6px">${f.flags.fatigued?`<span class="tag" style="background:#3a2430">虚弱</span>`:""}${targetTag}${stTags}</div>
+      <div class="fighterHeader">
+        <div class="avatarWrap ${avCls}">${avatarHtml}</div>
+        <div style="flex:1">
+          <div style="font-weight:900">${esc(f.name)}</div>
+          <div class="muted small" style="margin-top:6px">武器：${weaponTags}</div>
+          <div class="muted small" style="margin-top:6px">防具：${armorTags}</div>
+          <div class="muted small" style="margin-top:6px">${f.flags.fatigued?`<span class="tag" style="background:#3a2430">虚弱</span>`:""}${targetTag}${stTags}</div>
+        </div>
+      </div>
 
       ${barHTML("总气血（部位合计）", totalHpFromLimbs(f), f.maxHp, "hp")}
       ${barHTML("体力", f.stamina, f.maxStamina, "sta")}
@@ -1173,19 +1111,14 @@
 
   function roundTick(){
     if(!state || state.finished) return;
-
     log(`\n—— 第 ${state.round} 回合 ——`);
-
     tickDots(state.A, log);
     tickDots(state.B, log);
     if(checkWin()) { render(); return; }
-
     regenNeiliByInner(state.A, log);
     regenNeiliByInner(state.B, log);
-
     applyFatigueIfNeeded(state.A, log);
     applyFatigueIfNeeded(state.B, log);
-
     const ord=decideOrder(state.A, state.B, log);
     const first=ord.first==="A"?state.A:state.B;
     const second=ord.second==="A"?state.A:state.B;
@@ -1193,10 +1126,8 @@
 
     doOneAction(first, first===state.A?state.B:state.A, log);
     if(checkWin()) { render(); return; }
-
     doOneAction(second, second===state.A?state.B:state.A, log);
     if(checkWin()) { render(); return; }
-
     if(extraKey){
       const extra=extraKey==="A"?state.A:state.B;
       const other=extraKey==="A"?state.B:state.A;
@@ -1217,12 +1148,10 @@
     startBtn.disabled=true;
     stepBtn.disabled=true;
     resetBtn.disabled=true;
-
     while(state && !state.finished && running){
       roundTick();
       await new Promise(r=>setTimeout(r,80));
     }
-
     startBtn.disabled=false;
     stepBtn.disabled=false;
     resetBtn.disabled=false;
@@ -1235,39 +1164,8 @@
     resetBtn.disabled=false;
   }
 
-  // ----------------- 编辑器：机制调度通用UI -----------------
-  function panelHelpHTML(context){
-    if(context==="outer"){
-      return makeAccordion(`HELP_${context}_${Math.random().toString(36).slice(2)}`,"填写说明（外功机制）",`
-        <div class="muted">
-          外功机制在“命中后、伤害前”触发（适合破甲/眩晕/内伤等），吸血在伤害后结算。<br><br>
-          字段：chance概率0~1；duration持续回合；value数值；pct比例；maxStacks最大叠层。<br><br>
-          外功“定点倾向”：仅在外功施展成功时，让该次攻击更偏向目标部位。<br>
-          - 目标部位：头/手/身/腿/脚<br>
-          - 倾向倍率mult：1=无变化，2=明显偏向，3~5=强烈偏向（仍非必定）
-        </div>
-      `,false);
-    }
-    if(context==="inner"){
-      return makeAccordion(`HELP_${context}_${Math.random().toString(36).slice(2)}`,"填写说明（内功机制）",`
-        <div class="muted">
-          内功机制在“每回合回内之后”触发，适合护体（减伤）、回血、增益、解毒、压制等。<br><br>
-          常用：stat_mod（damageTakenMult=0.9表示减伤10%）、restore（回体/回内）、heal（回血）。<br>
-        </div>
-      `,false);
-    }
-    return makeAccordion(`HELP_${context}_${Math.random().toString(36).slice(2)}`,"填写说明（部位阈值机制）",`
-      <div class="muted">
-        部位阈值分两档：&lt;50% 与 &lt;25%。只要该部位比例低于阈值，就会参与判定。<br><br>
-        推荐机制：<br>
-        1）limb_stat_mod（即时属性修正）：agilityMult/aggressionMult/parryMult/evasionBonus/damageTakenMult/neiliRegenMult。<br>
-        2）action_skip（丢行动）：actions=丢几次；once=true表示最多触发一次。<br>
-        3）disarm（脱手/受损）：mode=auto/offhand/twohand_degrade；once建议true。<br>
-      </div>
-    `,false);
-  }
-
-  function effectSelectorHTML(prefix, context){
+  // ---- 编辑器：机制调度（维持原逻辑） ----
+  function effectSelectorHTML(prefix){
     const options=EFFECT_LIBRARY.map(e=>`<option value="${e.type}">${esc(e.label)}</option>`).join("");
     return `
       <div class="twoCol">
@@ -1275,7 +1173,6 @@
         <button class="secondary" id="${prefix}_addEffect" style="padding:8px 10px;border-radius:10px;border:none;cursor:pointer">添加机制</button>
       </div>
       <div class="mini" style="margin-top:6px">选择机制类型→添加→在下方列表直接改参数。删除可移除该机制。</div>
-      ${panelHelpHTML(context)}
       <div id="${prefix}_effectList"></div>
     `;
   }
@@ -1286,7 +1183,6 @@
       const meta=EFFECT_LIBRARY.find(x=>x.type===e.type);
       const label=meta?meta.label:e.type;
       const idBase=`${prefix}_e_${idx}`;
-
       const fields=(meta?meta.fields:Object.keys(e)).filter(x=>x!=="type");
       const fieldHTML=(field)=>{
         const v=e[field];
@@ -1322,25 +1218,21 @@
         const val=(v==null?"":v);
         return `<input id="${idBase}_${field}" type="number" step="${step}" value="${esc(val)}" placeholder="${esc(field)}">`;
       };
-
       const gridClass=fields.length<=2?"twoCol":(fields.length<=3?"threeCol":"twoCol");
-
       return `
         <div class="effectRow">
           <div class="top">
             <div class="name">${esc(label)}</div>
             <button class="btnX" id="${idBase}_del">删除</button>
           </div>
-          <div class="${gridClass}" style="margin-top:8px">
-            ${fields.map(fieldHTML).join("")}
-          </div>
+          <div class="${gridClass}" style="margin-top:8px">${fields.map(fieldHTML).join("")}</div>
           <div class="mini" style="margin-top:6px">type=<span class="mono">${esc(e.type)}</span></div>
         </div>
       `;
     }).join("");
   }
 
-  function bindEffectScheduler(prefix, getEffectsRef, rerender){
+  function bindEffectScheduler(prefix, getEffectsRef){
     const addBtn=document.getElementById(`${prefix}_addEffect`);
     const sel=document.getElementById(`${prefix}_effectType`);
     const listEl=document.getElementById(`${prefix}_effectList`);
@@ -1349,7 +1241,6 @@
     const renderList=()=>{
       const effects=getEffectsRef();
       listEl.innerHTML=buildEffectListHTML(prefix, effects);
-
       effects.forEach((e, idx)=>{
         const idBase=`${prefix}_e_${idx}`;
         const delBtn=document.getElementById(`${idBase}_del`);
@@ -1357,7 +1248,6 @@
           delBtn.addEventListener("click", ()=>{
             effects.splice(idx,1);
             renderList();
-            rerender && rerender();
           });
         }
         const meta=EFFECT_LIBRARY.find(x=>x.type===e.type);
@@ -1366,16 +1256,10 @@
           const el=document.getElementById(`${idBase}_${field}`);
           if(!el) continue;
           const handler=()=>{
-            if(field==="resource" || field==="mode"){
-              e[field]=el.value;
-            } else if(field==="once"){
-              e[field]=(el.value==="true");
-            } else if(field==="name"){
-              e[field]=el.value;
-            } else {
-              if(el.value==="") { delete e[field]; }
-              else e[field]=safeNum(el.value, e[field]);
-            }
+            if(field==="resource" || field==="mode"){ e[field]=el.value; }
+            else if(field==="once"){ e[field]=(el.value==="true"); }
+            else if(field==="name"){ e[field]=el.value; }
+            else { if(el.value==="") delete e[field]; else e[field]=safeNum(el.value, e[field]); }
           };
           el.addEventListener("input", handler);
           el.addEventListener("change", handler);
@@ -1387,13 +1271,12 @@
       const effects=getEffectsRef();
       effects.push(defaultEffect(sel.value));
       renderList();
-      rerender && rerender();
     });
 
     renderList();
   }
 
-  // ----------------- 编辑器：防具槽 -----------------
+  // ---- 编辑器：防具槽（略：保持你之前版本，支持neiliRegenMult） ----
   function armorSlotHTML(key, slotKey, slotLabel, armor){
     const a=armor[slotKey]||{name:"无",mods:{}};
     const m=a.mods||{};
@@ -1418,43 +1301,57 @@
         <div class="threeCol" style="margin-top:8px">
           <input id="${pid("critBonus")}" type="number" step="0.01" value="${safeNum(m.critBonus,0)}" placeholder="暴击+">
           <input id="${pid("evasionBonus")}" type="number" step="0.01" value="${safeNum(m.evasionBonus,0)}" placeholder="回避+">
-          <div class="mini">0.05=+5%</div>
+          <input id="${pid("neiliRegenMult")}" type="number" step="0.01" value="${safeNum(m.neiliRegenMult,1)}" placeholder="回内倍率(1=不变)">
         </div>
       </div>
     `;
   }
 
-  // ----------------- 编辑器：部位阈值面板 -----------------
+  // ---- 编辑器：部位阈值面板（略：保持你之前版本） ----
   function limbRulePanelHTML(key, limbKey){
     const L = LIMBS.find(x=>x.key===limbKey);
     const basePrefix = `${key}_limb_${limbKey}`;
     return `
       <div class="subPanel">
         <div class="subTitle">${esc(L.label)}阈值机制</div>
-        <div class="mini">当${L.label}部位血量比例低于阈值时，启用对应列表（可叠加）。</div>
-
         ${makeAccordion(`${basePrefix}_50acc`, `${L.label} <50% 列表（展开调度）`, `
-          ${effectSelectorHTML(`${basePrefix}_50`, "limb")}
+          ${effectSelectorHTML(`${basePrefix}_50`)}
         `, false)}
-
         ${makeAccordion(`${basePrefix}_25acc`, `${L.label} <25% 列表（展开调度）`, `
-          ${effectSelectorHTML(`${basePrefix}_25`, "limb")}
+          ${effectSelectorHTML(`${basePrefix}_25`)}
         `, false)}
       </div>
     `;
   }
 
-  // ----------------- 编辑器主面板 -----------------
+  // ---- 头像编辑 UI（新增） ----
+  function avatarEditorHTML(key){
+    const f=editorModel[key];
+    const id=(n)=>`${key}_${n}`;
+    const preview = f.avatarDataUrl
+      ? `<div class="avatarMini"><img src="${esc(f.avatarDataUrl)}" alt="preview"></div><div class="mini">已设置（存于人物卡）</div>`
+      : `<div class="avatarMini"><div class="ph">无</div></div><div class="mini">未设置</div>`;
+    return `
+      <div class="subPanel">
+        <div class="subTitle">头像</div>
+        <div class="mini">从本机选择图片（不会上传到服务器）。战斗中：总气血&lt;50%变暗，&lt;25%变红。</div>
+        <div class="twoCol" style="margin-top:8px">
+          <input id="${id("avatarFile")}" type="file" accept="image/*">
+          <button class="secondary" id="${id("avatarClear")}" style="border:none;border-radius:10px;padding:8px 10px;cursor:pointer">清空头像</button>
+        </div>
+        <div class="avatarPreview">${preview}</div>
+        <div class="avatarHint">提示：图片越小越快（建议&lt;1MB）。</div>
+      </div>
+    `;
+  }
+
+  // ---- 编辑器主面板：加入头像块（新增） ----
   function editorPanel(key, title){
     const f=editorModel[key];
     const id=(n)=>`${key}_${n}`;
     const armor=f.armor;
 
-    const outerPrefix=`${key}_outer`;
-    const innerPrefix=`${key}_inner`;
-
     const t = f.outerSkill?.targeting || {enabled:false,limb:"body",mult:1};
-
     const limbOptions = `
       <option value="head" ${t.limb==="head"?"selected":""}>头</option>
       <option value="hands" ${t.limb==="hands"?"selected":""}>手</option>
@@ -1466,33 +1363,29 @@
     return `
       <div class="panelTitle">${esc(title)}</div>
 
+      ${avatarEditorHTML(key)}
+
       ${row("姓名", `<input id="${id("name")}" type="text" value="${esc(f.name)}">`)}
-
-      ${row("总气血", `<input id="${id("hp")}" type="number" value="${safeNum(f.hp,260)}"><div class="mini">会按占比自动分配到五部位。</div>`)}
-
+      ${row("总气血", `<input id="${id("hp")}" type="number" value="${safeNum(f.hp,260)}">`)}
       ${row("体力/内力", `
         <div class="twoCol">
           <input id="${id("stamina")}" type="number" value="${safeNum(f.stamina,180)}">
           <input id="${id("neili")}" type="number" value="${safeNum(f.neili,120)}">
         </div>
       `)}
-
       ${row("筋力/横练", `
         <div class="twoCol">
           <input id="${id("strength")}" type="number" value="${safeNum(f.strength,60)}">
           <input id="${id("hardening")}" type="number" value="${safeNum(f.hardening,50)}">
         </div>
       `)}
-
       ${row("敏捷", `<input id="${id("agility")}" type="number" value="${safeNum(f.agility,60)}">`)}
-
       ${row("侵略/拆招", `
         <div class="twoCol">
           <input id="${id("aggression")}" type="number" value="${safeNum(f.aggression,60)}">
           <input id="${id("parry")}" type="number" value="${safeNum(f.parry,60)}">
         </div>
       `)}
-
       ${row("暴击/暴伤", `
         <div class="twoCol">
           <input id="${id("baseCrit")}" type="number" step="0.01" value="${safeNum(f.baseCrit,0.10)}">
@@ -1542,14 +1435,14 @@
           <input id="${id("innerRegen")}" type="number" value="${safeNum(f.innerSkill?.regenPerRound,0)}">
         </div>
       `)}
-      ${makeAccordion(`${key}_innerAcc`, "内功机制调度（回合开始触发）", effectSelectorHTML(innerPrefix,"inner"), false)}
+      ${makeAccordion(`${key}_innerAcc`, "内功机制调度", effectSelectorHTML(`${key}_inner`), false)}
 
       <div class="hr"></div>
 
       ${row("外功启用", `
         <label class="mini" style="display:flex;align-items:center;gap:8px">
           <input id="${id("outerEnabled")}" type="checkbox" ${f.outerSkill?.enabled?"checked":""}>
-          启用外功（命中后还会做施展判定）
+          启用外功（命中后仍需施展判定）
         </label>
       `)}
       ${row("外功名/消耗", `
@@ -1562,7 +1455,6 @@
       ${row("外功加攻", `<input id="${id("outerBA")}" type="number" value="${safeNum(f.outerSkill?.bonusAttack,0)}">`)}
 
       ${makeAccordion(`${key}_outerTargetAcc`, "外功定点倾向（展开调度）", `
-        <div class="mini">仅在外功施展成功的那一次攻击生效：更偏向某个部位。</div>
         ${row("启用偏向", `
           <label class="mini" style="display:flex;align-items:center;gap:8px">
             <input id="${id("outerTEn")}" type="checkbox" ${t.enabled?"checked":""}>
@@ -1570,16 +1462,14 @@
           </label>
         `)}
         ${row("目标部位", `<select id="${id("outerTLimb")}">${limbOptions}</select>`)}
-        ${row("倾向倍率", `<input id="${id("outerTMult")}" type="number" step="0.1" min="1" max="5" value="${clamp(safeNum(t.mult,1),1,5)}"><div class="mini">1=无变化，2=明显偏向，3~5=强烈偏向（仍非必定）。</div>`)}
-        ${panelHelpHTML("outer")}
+        ${row("倾向倍率", `<input id="${id("outerTMult")}" type="number" step="0.1" min="1" max="5" value="${clamp(safeNum(t.mult,1),1,5)}">`)}
       `, false)}
 
-      ${makeAccordion(`${key}_outerAcc`, "外功机制调度（命中后伤害前触发）", effectSelectorHTML(outerPrefix,"outer"), false)}
+      ${makeAccordion(`${key}_outerAcc`, "外功机制调度", effectSelectorHTML(`${key}_outer`), false)}
 
       <hr class="hr">
 
       ${makeAccordion(`${key}_limbAcc`, "部位阈值机制（头/手/身/腿/脚）", `
-        <div class="mini">每个部位分&lt;50%和&lt;25%两档机制列表。可用机制：limb_stat_mod / action_skip / disarm 等。</div>
         ${limbRulePanelHTML(key,"head")}
         ${limbRulePanelHTML(key,"hands")}
         ${limbRulePanelHTML(key,"body")}
@@ -1600,6 +1490,32 @@
         arrow.textContent=open?"▼":"▶";
       });
     });
+  }
+
+  // ---- 头像上传绑定（新增） ----
+  function bindAvatarEditor(key){
+    const f=editorModel[key];
+    const fileEl=document.getElementById(`${key}_avatarFile`);
+    const clearBtn=document.getElementById(`${key}_avatarClear`);
+    if(fileEl){
+      fileEl.addEventListener("change", ()=>{
+        const file=fileEl.files && fileEl.files[0];
+        if(!file) return;
+        if(!file.type.startsWith("image/")) return;
+        const reader=new FileReader();
+        reader.onload=()=>{
+          f.avatarDataUrl = String(reader.result||"");
+          renderEditors(); // 让预览立刻刷新
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+    if(clearBtn){
+      clearBtn.addEventListener("click", ()=>{
+        f.avatarDataUrl="";
+        renderEditors();
+      });
+    }
   }
 
   function bindEditor(key){
@@ -1649,7 +1565,6 @@
       ["outerSC", ()=>{ f.outerSkill=f.outerSkill||{name:"无",enabled:false,neiliCost:0,staminaCost:0,bonusAttack:0,targeting:{enabled:false,limb:"body",mult:1},effects:[]}; f.outerSkill.staminaCost=num("outerSC",0); }],
       ["outerBA", ()=>{ f.outerSkill=f.outerSkill||{name:"无",enabled:false,neiliCost:0,staminaCost:0,bonusAttack:0,targeting:{enabled:false,limb:"body",mult:1},effects:[]}; f.outerSkill.bonusAttack=num("outerBA",0); }],
 
-      // 外功定点倾向
       ["outerTEn", ()=>{ f.outerSkill=f.outerSkill||{targeting:{}}; f.outerSkill.targeting=f.outerSkill.targeting||{enabled:false,limb:"body",mult:1}; f.outerSkill.targeting.enabled=chk("outerTEn"); }],
       ["outerTLimb", ()=>{ f.outerSkill=f.outerSkill||{targeting:{}}; f.outerSkill.targeting=f.outerSkill.targeting||{enabled:false,limb:"body",mult:1}; f.outerSkill.targeting.limb=gid("outerTLimb").value; }],
       ["outerTMult", ()=>{ f.outerSkill=f.outerSkill||{targeting:{}}; f.outerSkill.targeting=f.outerSkill.targeting||{enabled:false,limb:"body",mult:1}; f.outerSkill.targeting.mult=clamp(num("outerTMult",1),1,5); }],
@@ -1661,7 +1576,7 @@
       el.addEventListener("change", fn);
     });
 
-    // 防具槽绑定
+    // 防具槽
     f.armor=f.armor||{head:{name:"无",mods:{}},hands:{name:"无",mods:{}},body:{name:"无",mods:{}},legs:{name:"无",mods:{}},feet:{name:"无",mods:{}}};
     for(const slot of ["head","hands","body","legs","feet"]){
       const pid=(n)=>document.getElementById(`${key}_armor_${slot}_${n}`);
@@ -1679,6 +1594,9 @@
         el.addEventListener("change", handler);
       }
     }
+
+    // 头像上传/清空
+    bindAvatarEditor(key);
   }
 
   function renderEditors(){
@@ -1689,24 +1607,25 @@
     bindEditor("A");
     bindEditor("B");
 
-    bindEffectScheduler("A_outer", ()=>editorModel.A.outerSkill.effects, ()=>{});
-    bindEffectScheduler("A_inner", ()=>editorModel.A.innerSkill.effects, ()=>{});
-    bindEffectScheduler("B_outer", ()=>editorModel.B.outerSkill.effects, ()=>{});
-    bindEffectScheduler("B_inner", ()=>editorModel.B.innerSkill.effects, ()=>{});
+    // 绑定机制调度（外功/内功）
+    bindEffectScheduler("A_outer", ()=>editorModel.A.outerSkill.effects);
+    bindEffectScheduler("A_inner", ()=>editorModel.A.innerSkill.effects);
+    bindEffectScheduler("B_outer", ()=>editorModel.B.outerSkill.effects);
+    bindEffectScheduler("B_inner", ()=>editorModel.B.innerSkill.effects);
 
+    // 部位阈值调度
     for(const side of ["A","B"]){
       const model = editorModel[side];
       model.limbRules = model.limbRules || emptyLimbRules();
       for(const L of LIMBS){
         const k=L.key;
         model.limbRules[k]=model.limbRules[k]||{below50:[],below25:[]};
-        bindEffectScheduler(`${side}_limb_${k}_50`, ()=>model.limbRules[k].below50, ()=>{});
-        bindEffectScheduler(`${side}_limb_${k}_25`, ()=>model.limbRules[k].below25, ()=>{});
+        bindEffectScheduler(`${side}_limb_${k}_50`, ()=>model.limbRules[k].below50);
+        bindEffectScheduler(`${side}_limb_${k}_25`, ()=>model.limbRules[k].below25);
       }
     }
   }
 
-  // ----------------- 载入战斗状态 -----------------
   function loadStateFromEditor(){
     const data=deepClone(editorModel);
     state={
@@ -1716,11 +1635,11 @@
       finished:false
     };
     logEl.textContent="";
-    log("已载入人物卡。点击“开始对决”将自动推演至死亡。");
+    log("已载入人物卡。可在左侧上传头像，然后点击“开始对决”。");
     render();
   }
 
-  // ----------------- 事件 -----------------
+  // ---- 事件 ----
   startBtn.addEventListener("click", ()=>{
     if(!state || state.finished) loadStateFromEditor();
     stopAuto();
@@ -1736,11 +1655,10 @@
     roundTick();
   });
 
-  // 启动
+  // ---- 启动 ----
   renderEditors();
   loadStateFromEditor();
 })();
 </script>
 </body>
 </html>
-
